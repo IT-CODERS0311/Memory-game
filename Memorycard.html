@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Card Game</title>
+<style>
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #ff9a9e, #fad0c4);
+    margin:0; padding:0;
+    display:flex; justify-content:center; align-items:center;
+    min-height:100vh;
+}
+.container {
+    text-align:center;
+    background:#fff;
+    padding:30px;
+    border-radius:20px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.2);
+    width:90%; max-width:700px;
+}
+input, button {
+    padding:10px; margin:10px;
+    border-radius:5px; border:1px solid #ccc;
+    font-size:16px;
+}
+button {
+    border:none; cursor:pointer;
+    background:#ff6f91; color:white; font-weight:bold;
+    transition:0.3s;
+}
+button:hover { background:#ff9671; }
+.levels button { width:60px; height:50px; margin:5px; }
+.game-board {
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+    gap:10px;
+    margin-top:20px;
+}
+.card {
+    width:60px; height:80px; perspective:1000px;
+    cursor:pointer; position:relative;
+}
+.card .front, .card .back {
+    width:100%; height:100%;
+    position:absolute; backface-visibility:hidden;
+    border-radius:10px;
+    display:flex; justify-content:center; align-items:center;
+    font-size:24px; transition: transform 0.5s;
+}
+.card .front { background:#ff6f91; color:#fff; }
+.card .back { background:#ff9671; color:#fff; transform:rotateY(180deg); }
+.card.flipped .front { transform:rotateY(180deg); }
+.card.flipped .back { transform:rotateY(0deg); }
+.hidden { display:none; }
+#matchMessage, #levelMessage {
+    font-size:18px; margin:10px 0; font-weight:bold;
+    transition: all 0.3s;
+}
+@keyframes shake {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(5deg); }
+  50% { transform: rotate(-5deg); }
+  75% { transform: rotate(5deg); }
+  100% { transform: rotate(0deg); }
+}
+.shake {
+  animation: shake 0.3s;
+}
+</style>
+</head>
+<body>
+
+<!-- Page 1: Player info -->
+<div class="container" id="page1">
+    <h1>Memory Card Game</h1>
+    <input type="text" id="playerName" placeholder="Enter Your Name" required>
+    <input type="text" id="playerCountry" placeholder="Enter Your Country" required>
+    <button id="startBtn">Start Game</button>
+</div>
+
+<!-- Page 2: Level selection -->
+<div class="container hidden" id="page2">
+    <h1>Welcome, <span id="playerInfo"></span></h1>
+    <h2>Select Level</h2>
+    <div class="levels" id="levelsContainer"></div>
+</div>
+
+<!-- Page 3: Game -->
+<div class="container hidden" id="page3">
+    <h1>Memory Game</h1>
+    <p>Time Left: <span id="timer">02:00</span></p>
+    <div id="matchMessage"></div>
+    <div id="levelMessage"></div>
+    <div class="game-board" id="gameBoard"></div>
+</div>
+
+<script>
+// List of emojis to use
+const emojis = ["😀","😂","😎","😍","😜","🤩","🥳","🤖","👾","🦄","🐶","🐱","🐵","🦊","🐸","🐼","🐨","🐯","🐷","🐔","🐧","🐢","🐙","🌸","🍎","🍕","⚡","⭐","🔥","💎","🎵","🎈","🎁"];
+
+let playerName='', playerCountry='', selectedLevel=1;
+const page1=document.getElementById('page1');
+const page2=document.getElementById('page2');
+const page3=document.getElementById('page3');
+const matchMessage=document.getElementById('matchMessage');
+const levelMessage=document.getElementById('levelMessage');
+
+document.getElementById('startBtn').addEventListener('click',()=>{
+    playerName=document.getElementById('playerName').value.trim();
+    playerCountry=document.getElementById('playerCountry').value.trim();
+    if(!playerName || !playerCountry){ alert('Enter both fields'); return; }
+    document.getElementById('playerInfo').textContent=`${playerName} from ${playerCountry}`;
+    showPage(page2);
+    createLevelButtons();
+});
+
+function showPage(page){
+    page1.classList.add('hidden');
+    page2.classList.add('hidden');
+    page3.classList.add('hidden');
+    page.classList.remove('hidden');
+}
+
+function createLevelButtons(){
+    const container=document.getElementById('levelsContainer');
+    container.innerHTML='';
+    for(let i=1;i<=20;i++){
+        const btn=document.createElement('button');
+        btn.textContent=i;
+        btn.addEventListener('click',()=>{ selectedLevel=i; startGame(); });
+        container.appendChild(btn);
+    }
+}
+
+function startGame(){
+    showPage(page3);
+    let totalCards=20 + (selectedLevel-1)*5;
+    if(totalCards%2!==0) totalCards+=1; // Ensure even
+    const gameBoard=document.getElementById('gameBoard');
+    gameBoard.innerHTML='';
+    matchMessage.textContent='';
+    levelMessage.textContent='';
+
+    // select emojis randomly without repetition
+    const shuffledEmojis = emojis.sort(()=>0.5-Math.random());
+    let selectedEmojis = shuffledEmojis.slice(0, totalCards/2);
+    let cardValues = [...selectedEmojis, ...selectedEmojis];
+    cardValues.sort(()=>0.5-Math.random());
+
+    cardValues.forEach(val=>{
+        const card=document.createElement('div');
+        card.classList.add('card');
+        card.dataset.value=val;
+        card.innerHTML=`<div class="front">?</div><div class="back">${val}</div>`;
+        gameBoard.appendChild(card);
+    });
+
+    let firstCard=null, secondCard=null, matchedPairs=0, lockBoard=false;
+    const cards=document.querySelectorAll('.card');
+
+    cards.forEach(card=>{
+        card.addEventListener('click',()=>{
+            if(lockBoard) return;
+            if(card.classList.contains('flipped')) return;
+
+            card.classList.add('flipped');
+
+            if(!firstCard){
+                firstCard=card;
+                return;
+            }
+
+            secondCard=card;
+            lockBoard=true;
+
+            if(firstCard.dataset.value===secondCard.dataset.value){
+                matchedPairs++;
+                matchMessage.textContent='You matched a card ✅';
+                setTimeout(()=>{ matchMessage.textContent=''; },1000);
+                firstCard=null;
+                secondCard=null;
+                lockBoard=false;
+
+                if(matchedPairs===totalCards/2){
+                    levelMessage.textContent='You completed the level 🎉';
+                    setTimeout(()=>{ showPage(page2); },1500);
+                }
+            } else {
+                // mismatch animation
+                firstCard.classList.add('shake');
+                secondCard.classList.add('shake');
+                setTimeout(()=>{
+                    firstCard.classList.remove('flipped','shake');
+                    secondCard.classList.remove('flipped','shake');
+                    firstCard=null;
+                    secondCard=null;
+                    lockBoard=false;
+                },800);
+            }
+        });
+    });
+
+    // Timer
+    let time=120;
+    const timerEl=document.getElementById('timer');
+    timerEl.textContent='02:00';
+    const interval=setInterval(()=>{
+        let minutes=Math.floor(time/60).toString().padStart(2,'0');
+        let seconds=(time%60).toString().padStart(2,'0');
+        timerEl.textContent=`${minutes}:${seconds}`;
+        time--;
+        if(time<0){
+            clearInterval(interval);
+            alert('⏰ Time Up! Try Again.');
+            showPage(page2);
+        }
+    },1000);
+}
+</script>
+</body>
+</html>
